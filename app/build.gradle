@@ -12,7 +12,7 @@ android {
         applicationId namespace
         minSdk 29
         targetSdk 34
-        versionCode 2016
+        versionCode 2017
         versionName "2.0"
         applicationVariants.configureEach { variant ->
             variant.outputs.configureEach {

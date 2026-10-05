@@ -25,8 +25,14 @@ public final class SnapService extends Service {
     private final Runnable timeout = this::requestStop;
     private PowerManager.WakeLock wakeLock;
     private CaptureEngine engine;
+    private PowerManager power;
+    private boolean thermalRegistered;
     private boolean receiverRegistered;
     private boolean closing, restartAfterClose;
+    private final PowerManager.OnThermalStatusChangedListener thermalListener = status -> {
+        if (status >= PowerManager.THERMAL_STATUS_SEVERE && engine != null && !closing)
+            engine.stop("设备温度过高，已停止拍摄");
+    };
     private final BroadcastReceiver stopReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) { requestStop(); }
     };
@@ -37,6 +43,11 @@ public final class SnapService extends Service {
         channel.setSound(null, null);
         channel.enableVibration(false);
         getSystemService(NotificationManager.class).createNotificationChannel(channel);
+        power = getSystemService(PowerManager.class);
+        try {
+            power.addThermalStatusListener(getMainExecutor(), thermalListener);
+            thermalRegistered = true;
+        } catch (RuntimeException e) { Log.w(HookEntry.TAG, "Thermal monitoring unavailable", e); }
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -49,7 +60,6 @@ public final class SnapService extends Service {
             return START_NOT_STICKY;
         }
         SnapConfig config = SnapConfig.read(this);
-        PowerManager power = getSystemService(PowerManager.class);
         try {
             Intent stop = new Intent(this, SnapService.class).setAction(SnapConfig.ACTION_STOP);
             PendingIntent action = PendingIntent.getService(this, 0, stop,
@@ -73,6 +83,11 @@ public final class SnapService extends Service {
             }
             if (engine != null) {
                 if (closing) restartAfterClose = true;
+                return START_NOT_STICKY;
+            }
+            if (isThermalConstrained()) {
+                SnapConfig.status(this, "拍摄未开始：设备温度过高，请等待降温");
+                stopSelf();
                 return START_NOT_STICKY;
             }
             wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CameraSnap:Capture");
@@ -111,9 +126,19 @@ public final class SnapService extends Service {
         });
     }
 
+    private boolean isThermalConstrained() {
+        try { return power.getCurrentThermalStatus() >= PowerManager.THERMAL_STATUS_SEVERE; }
+        catch (RuntimeException e) { Log.w(HookEntry.TAG, "Thermal status unavailable", e); return false; }
+    }
+
     @Override public void onDestroy() {
         main.removeCallbacks(timeout);
         if (engine != null) engine.close();
+        if (thermalRegistered) {
+            try { power.removeThermalStatusListener(thermalListener); }
+            catch (RuntimeException e) { Log.w(HookEntry.TAG, "Cannot remove thermal listener", e); }
+            thermalRegistered = false;
+        }
         if (receiverRegistered) unregisterReceiver(stopReceiver);
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         stopForeground(STOP_FOREGROUND_REMOVE);
