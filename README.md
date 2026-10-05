@@ -1,42 +1,54 @@
 <img src="./doc/CameraSnap.svg" width="200" alt="icon">
 
-# UnlockMIUICameraSnap
+# UnlockCameraSnap
 [![Xposed](https://img.shields.io/badge/-Xposed-green?style=flat&logo=Android&logoColor=white)](#)
-[![GitHub](https://img.shields.io/github/license/GSWXXN/UnlockMIUICameraSnap)](https://github.com/GSWXXN/UnlockMIUICameraSnap/blob/main/LICENSE)
-[![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/GSWXXN/UnlockMIUICameraSnap?label=version)](https://github.com/Xposed-Modules-Repo/com.gswxxn.camerasnap/releases)
-[![GitHub all releases](https://img.shields.io/github/downloads/Xposed-Modules-Repo/com.gswxxn.camerasnap/total?label=Downloads)](https://github.com/Xposed-Modules-Repo/com.gswxxn.camerasnap/releases)
+[![GitHub](https://img.shields.io/github/license/vay1314/UnlockCameraSnap)](https://github.com/vay1314/UnlockCameraSnap/blob/main/LICENSE)
+[![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/vay1314/UnlockCameraSnap?label=version)](https://github.com/vay1314/UnlockCameraSnap/releases)
+[![GitHub all releases](https://img.shields.io/github/downloads/vay1314/UnlockCameraSnap/total?label=Downloads)](https://github.com/vay1314/UnlockCameraSnap/releases)
 
-解锁/补全 MIUI 街拍模式
+在 HyperOS 中实现息屏长按音量下键拍照、录像。
 
 ## 测试环境
 
-> 小米12S Ultra  
-> Android 13  
-> MIUI 14
+> 小米 15 Pro  
+> Android 15  
+> 澎湃 OS 2（HyperOS 2）  
+> 相机 6.0.002710.2
 
 ## 模块功能
-1. 为所有机型/相机板本开放街拍模式
-2. 补全录像模式
+
+1. 实现街拍模式。
+2. 新版相机设置中的“街拍”选项直接打开模块设置，提供拍摄模式、摄像头选择、保存路径和桌面图标隐藏开关。照片和视频默认保存到 `DCIM/Camera/Snap`，可通过系统文件夹选择器选择其他本地目录。
 
 ## 使用方法
 
-1. 在Xposed管理器(LSPosed)中激活模块
-2. 作用域勾选相机
-3. 强制停止相机
+1. 安装模块，在支持 **libxposed API 102** 的 Xposed 管理器（如支持该 API 的 LSPosed 版本）中激活。
+2. 作用域勾选 **相机** 和 **系统框架（system）**，然后重启手机。
+3. 从桌面图标或相机设置中的“街拍”进入模块，授予相机权限；录像还需要麦克风权限。
+4. 选择“息屏连拍”或“息屏录像”，熄屏后长按音量下键开始，松键停止。
+5. 隐藏桌面图标后，可通过相机“街拍”入口进入模块，关闭隐藏开关恢复图标。
+
+   
 
 ## 已知问题
-* 录像途中可能会被打断重新录制, 经过调查后发现是系统向相机发送了音量下按键被抬起事件. 由于问题发生在系统内, 与相机无关, 所以暂时不打算解决.
-* 5.0.x 的相机的设置中可能不会出现街拍模式的设置, 可以通过 LSPosed 管理器中的模块设置来开启调整街拍模式.
+
+* 目前测试环境为上述设备，其他机型、系统和相机版本仍需验证。
+
+* 相机设置入口依赖相机内部实现，部分版本可能无法显示或跳转，可通过模块桌面图标配置。
+
+* 因新版相机删除内置的街拍服务后，仅解除限制就无法恢复功能，模块使用独立 Camera2 拍摄服务，不包含小米相机的 HDR、徕卡风格、水印等私有处理功能。普通相机或其他应用占用摄像头时，息屏拍摄可能失败。
+
+  
 
 ## 无法使用
 
-请先检查模块是否正常激活，并且作用域是否勾选。
-如果排查后仍有错误，请提交issue，并附上 LSPosed 的日志.  
-酷安[@迷璐](http://www.coolapk.com/u/1189245)
+请先检查模块是否正常激活、框架是否支持 API 102、相机和系统框架作用域是否勾选，以及激活后是否重启。再检查模块页面中的最近系统连接、拍摄状态、模式和权限。
+
+如果排查后仍有错误，请提交 [issue](https://github.com/vay1314/UnlockCameraSnap/issues)，附上手机型号、Android / HyperOS 版本、相机和模块版本、具体表现，以及 LSPosed 日志和 Logcat 中标签为 `UnlockCameraSnap` 的日志。振动问题可同时提供 `VibratorManagerService` 日志。
 
 
 ## 致谢
-使用 [Yuki Hook API](https://github.com/fankes/YukiHookAPI) 构建模块  
-使用 [BlockMIUI](https://github.com/Block-Network/blockmiui) 构建UI界面  
-使用 [DexKit](https://github.com/LuckyPray/DexKit) 查找被混淆的方法  
-使用 [libsu](https://github.com/topjohnwu/libsu) 执行 Shell 命令  
+
+基于 [GSWXXN / UnlockMIUICameraSnap](https://github.com/GSWXXN/UnlockMIUICameraSnap) 重建新版息屏拍摄链路。  
+使用 [libxposed API](https://github.com/libxposed/api) 构建 API 102 Hook。  
+使用 [Miuix](https://github.com/compose-miuix-ui/miuix) 构建 Compose 设置界面。  
