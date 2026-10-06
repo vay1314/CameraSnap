@@ -8,15 +8,15 @@ android {
     compileSdk 37
 
     defaultConfig {
-        namespace 'com.vay.camerasnap'
+        namespace 'io.github.vay1314.camerasnap'
         applicationId namespace
         minSdk 29
         targetSdk 34
-        versionCode 2017
+        versionCode 2018
         versionName "2.0"
         applicationVariants.configureEach { variant ->
             variant.outputs.configureEach {
-                outputFileName = "UnlockCameraSnap_" + versionName + "(" + versionCode + ").apk"
+                outputFileName = "CameraSnap_" + versionName + "(" + versionCode + ").apk"
             }
         }
     }

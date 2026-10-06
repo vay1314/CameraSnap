@@ -1,4 +1,4 @@
--keep class com.vay.camerasnap.HookEntry { public <init>(); }
--keepnames class com.vay.camerasnap.SnapService
--keepnames class com.vay.camerasnap.SettingsActivity
+-keep class io.github.vay1314.camerasnap.HookEntry { public <init>(); }
+-keepnames class io.github.vay1314.camerasnap.SnapService
+-keepnames class io.github.vay1314.camerasnap.SettingsActivity
 -dontwarn io.github.libxposed.annotation.**

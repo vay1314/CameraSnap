@@ -1,10 +1,10 @@
 <img src="./doc/CameraSnap.svg" width="200" alt="icon">
 
-# UnlockCameraSnap
+# CameraSnap
 [![Xposed](https://img.shields.io/badge/-Xposed-green?style=flat&logo=Android&logoColor=white)](#)
-[![GitHub](https://img.shields.io/github/license/vay1314/UnlockCameraSnap)](https://github.com/vay1314/UnlockCameraSnap/blob/main/LICENSE)
-[![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/vay1314/UnlockCameraSnap?label=version)](https://github.com/vay1314/UnlockCameraSnap/releases)
-[![GitHub all releases](https://img.shields.io/github/downloads/vay1314/UnlockCameraSnap/total?label=Downloads)](https://github.com/vay1314/UnlockCameraSnap/releases)
+[![GitHub](https://img.shields.io/github/license/vay1314/CameraSnap)](https://github.com/vay1314/CameraSnap/blob/main/LICENSE)
+[![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/vay1314/CameraSnap?label=version)](https://github.com/vay1314/CameraSnap/releases)
+[![GitHub all releases](https://img.shields.io/github/downloads/vay1314/CameraSnap/total?label=Downloads)](https://github.com/vay1314/CameraSnap/releases)
 
 在 HyperOS 中实现息屏长按音量下键拍照、录像。
 
@@ -28,7 +28,6 @@
 4. 选择“息屏连拍”或“息屏录像”，熄屏后长按音量下键开始，松键停止。
 5. 隐藏桌面图标后，可通过相机“街拍”入口进入模块，关闭隐藏开关恢复图标。
 
-   
 
 ## 已知问题
 
@@ -44,7 +43,7 @@
 
 请先检查模块是否正常激活、框架是否支持 API 102、相机和系统框架作用域是否勾选，以及激活后是否重启。再检查模块页面中的最近系统连接、拍摄状态、模式和权限。
 
-如果排查后仍有错误，请提交 [issue](https://github.com/vay1314/UnlockCameraSnap/issues)，附上手机型号、Android / HyperOS 版本、相机和模块版本、具体表现，以及 LSPosed 日志和 Logcat 中标签为 `UnlockCameraSnap` 的日志。振动问题可同时提供 `VibratorManagerService` 日志。
+如果排查后仍有错误，请提交 [issue](https://github.com/vay1314/CameraSnap/issues)，附上手机型号、Android / HyperOS 版本、相机和模块版本、具体表现，以及 LSPosed 日志和 Logcat 中标签为 `CameraSnap` 的日志。振动问题可同时提供 `VibratorManagerService` 日志。
 
 
 ## 致谢

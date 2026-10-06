@@ -35,7 +35,7 @@
             android:foregroundServiceType="camera|microphone" />
 
         <provider android:name=".ConfigProvider"
-            android:authorities="com.vay.camerasnap.config"
+            android:authorities="io.github.vay1314.camerasnap.config"
             android:exported="true" />
     </application>
 </manifest>
