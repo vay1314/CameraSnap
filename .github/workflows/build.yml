@@ -25,7 +25,7 @@ jobs:
           cache: gradle
 
       - name: 安装 Android SDK
-        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;37.0.0"'
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "build-tools;37.0.0"'
 
       - name: 构建 APK 并运行检查
         shell: bash
