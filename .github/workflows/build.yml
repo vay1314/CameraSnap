@@ -4,7 +4,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -81,3 +85,36 @@ jobs:
             app/build/outputs/mapping/release/
           if-no-files-found: warn
           retention-days: 14
+
+      - name: 读取发布版本
+        id: release
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import re
+          from pathlib import Path
+
+          metadata = json.loads(Path("app/build/outputs/apk/release/output-metadata.json").read_text())
+          versions = {(element["versionCode"], element["versionName"]) for element in metadata["elements"]}
+          if len(versions) != 1:
+              raise SystemExit("APK 版本信息不一致")
+          code, name = versions.pop()
+          if not isinstance(code, int) or code < 1 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", name):
+              raise SystemExit("APK 版本信息不适合生成 Release 标签")
+          print(f"tag=v{name}")
+          print(f"name={name}")
+          PY
+
+      - name: 发布到 GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_NAME: ${{ steps.release.outputs.name }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" build/signed-apk/*.apk --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$RELEASE_TAG" build/signed-apk/*.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$RELEASE_NAME" --generate-notes
+          fi
