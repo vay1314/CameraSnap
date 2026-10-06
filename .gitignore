@@ -14,3 +14,6 @@
 .cxx
 local.properties
 *.apk
+*.p12
+*.jks
+*.keystore

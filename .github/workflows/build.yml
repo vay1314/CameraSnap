@@ -1,0 +1,83 @@
+name: 手动构建 APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: 构建与检查
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 配置 Java
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: 安装 Android SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;37.0.0"'
+
+      - name: 构建 APK 并运行检查
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease :app:testDebugUnitTest :app:lintRelease --no-daemon --console=plain
+
+      - name: 签名并验证 Release APK
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          for required in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS; do
+            if [[ -z "${!required}" ]]; then
+              printf '::error::未配置签名 Secret：%s\n' "$required"
+              exit 1
+            fi
+          done
+          umask 077
+          keystore="$(mktemp "$RUNNER_TEMP/camerasnap-keystore.XXXXXX")"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          unset ANDROID_KEYSTORE_BASE64
+          tools="$ANDROID_HOME/build-tools/37.0.0"
+          mkdir -p build/signed-apk
+          for apk in app/build/outputs/apk/release/*.apk; do
+            signed="build/signed-apk/$(basename "$apk")"
+            "$tools/zipalign" -c -P 16 4 "$apk"
+            "$tools/apksigner" sign --ks "$keystore" --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEYSTORE_PASSWORD --out "$signed" "$apk"
+            "$tools/apksigner" verify --verbose --print-certs "$signed"
+            "$tools/zipalign" -c -P 16 4 "$signed"
+          done
+
+      - name: 上传已签名 Release APK
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: CameraSnap-release-${{ github.run_number }}
+          path: build/signed-apk/*.apk
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: 上传检查报告
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: CameraSnap-reports-${{ github.run_number }}
+          path: |
+            app/build/reports/
+            app/build/test-results/testDebugUnitTest/
+            app/build/outputs/mapping/release/
+          if-no-files-found: warn
+          retention-days: 14
