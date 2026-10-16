@@ -19,6 +19,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.edit
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.lazy.LazyColumn
@@ -78,8 +79,10 @@ class SettingsActivity : ComponentActivity() {
                     } ?: error("无法读取所选文件夹")
                     resolver.takePersistableUriPermission(uri,
                         Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-                    SnapConfig.prefs(appContext).edit().putString("save_tree", uri.toString())
-                        .putString("save_tree_name", name).apply()
+                    SnapConfig.prefs(appContext).edit {
+                        putString("save_tree", uri.toString())
+                        putString("save_tree_name", name)
+                    }
                     resolver.notifyChange(SnapConfig.URI, null)
                 }
                 Log.d(HookEntry.TAG, "Directory selection completed in ${SystemClock.elapsedRealtime() - started}ms")
@@ -184,7 +187,7 @@ class SettingsActivity : ComponentActivity() {
                             Column(Modifier.selectableGroup()) {
                                 cameras.forEach { option ->
                                     Choice(option.label, null, option.id == cameraId) {
-                                        SnapConfig.prefs(this@SettingsActivity).edit().putString("camera_id", option.id).apply()
+                                        SnapConfig.prefs(this@SettingsActivity).edit { putString("camera_id", option.id) }
                                         notifyConfigChanged()
                                         refreshState()
                                         cameraExpanded = false
@@ -208,9 +211,6 @@ class SettingsActivity : ComponentActivity() {
                             onCheckedChange = ::setIconHidden
                         )
                     }
-                }
-                item {
-                    TextButton(text = "停止当前拍摄", onClick = { requestStop() }, modifier = Modifier.fillMaxWidth())
                 }
                 item {
                     Card(modifier = Modifier.fillMaxWidth()) {
@@ -248,7 +248,7 @@ class SettingsActivity : ComponentActivity() {
 
     private fun saveMode(value: Int) {
         requestStop()
-        SnapConfig.prefs(this).edit().putInt("mode", value).apply()
+        SnapConfig.prefs(this).edit { putInt("mode", value) }
         notifyConfigChanged()
         refreshState()
     }

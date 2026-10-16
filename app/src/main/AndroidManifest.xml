@@ -17,6 +17,8 @@
         android:label="@string/app_name"
         android:description="@string/xposed_desc"
         android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:icon="@mipmap/ic_launcher">
@@ -36,6 +38,7 @@
 
         <provider android:name=".ConfigProvider"
             android:authorities="io.github.vay1314.camerasnap.config"
+            android:permission="android.permission.STATUS_BAR_SERVICE"
             android:exported="true" />
     </application>
 </manifest>

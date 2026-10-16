@@ -10,21 +10,30 @@ import android.database.ContentObserver;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Build;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.ViewConfiguration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 final class SystemKeyDispatcher {
     private final Context context;
     private final HookEntry module;
     private final Handler worker;
+    private final HandlerThread thread;
     private final PowerManager power;
     private final PressGesture gesture;
     private volatile int mode = SnapConfig.OFF;
     private volatile boolean ready;
+    private volatile boolean closed;
+    private boolean cleanupFailed;
+    private ContentObserver observer;
+    private BroadcastReceiver receiver;
+    private boolean observerRegistered, receiverRegistered;
     private boolean claimedVolumeDown;
     private final String hookDescription;
     private int retries;
@@ -37,7 +46,7 @@ final class SystemKeyDispatcher {
         this.module = module;
         this.hookDescription = description;
         power = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-        HandlerThread thread = new HandlerThread("CameraSnapPolicy");
+        thread = new HandlerThread("CameraSnapPolicy");
         thread.start();
         worker = new Handler(thread.getLooper());
         gesture = new PressGesture(new PressGesture.Scheduler() {
@@ -48,23 +57,29 @@ final class SystemKeyDispatcher {
             @Override public void stop() { stopCapture(); }
         });
         worker.post(() -> {
-            context.getContentResolver().registerContentObserver(SnapConfig.URI, true,
-                    new ContentObserver(worker) {
-                        @Override public void onChange(boolean selfChange) { reload(); }
-                    });
-            IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
-            filter.addAction("android.intent.action.USER_SWITCHED");
-            BroadcastReceiver receiver = new BroadcastReceiver() {
-                @Override public void onReceive(Context ctx, Intent intent) { gesture.cancel(); }
-            };
-            if (Build.VERSION.SDK_INT >= 33)
-                context.registerReceiver(receiver, filter, null, worker, Context.RECEIVER_NOT_EXPORTED);
-            else context.registerReceiver(receiver, filter, null, worker);
-            reload();
+            if (closed) return;
+            try {
+                observer = new ContentObserver(worker) {
+                    @Override public void onChange(boolean selfChange) { reload(); }
+                };
+                context.getContentResolver().registerContentObserver(SnapConfig.URI, true, observer);
+                observerRegistered = true;
+                IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_ON);
+                filter.addAction("android.intent.action.USER_SWITCHED");
+                receiver = new BroadcastReceiver() {
+                    @Override public void onReceive(Context ctx, Intent intent) { gesture.cancel(); }
+                };
+                if (Build.VERSION.SDK_INT >= 33)
+                    context.registerReceiver(receiver, filter, null, worker, Context.RECEIVER_NOT_EXPORTED);
+                else context.registerReceiver(receiver, filter, null, worker);
+                receiverRegistered = true;
+                reload();
+            } catch (RuntimeException e) { module.log(Log.ERROR, HookEntry.TAG, "Policy registration failed", e); }
         });
     }
 
     private void reload() {
+        if (closed) return;
         try {
             SnapConfig config = SnapConfig.fromBundle(context.getContentResolver().call(SnapConfig.URI, "get", null, null));
             if (mode != config.mode) gesture.cancel();
@@ -77,7 +92,7 @@ final class SystemKeyDispatcher {
             gesture.cancel();
             mode = SnapConfig.OFF;
             ready = false;
-            if (retries++ < 12) {
+            if (!closed && retries++ < 12) {
                 worker.removeCallbacks(refresh);
                 worker.postDelayed(refresh, 5000);
             }
@@ -86,6 +101,7 @@ final class SystemKeyDispatcher {
     }
 
     boolean intercept(KeyEvent event, int userId) {
+        if (closed) return false;
         int key = event.getKeyCode();
         boolean up = event.getAction() == KeyEvent.ACTION_UP;
 
@@ -115,7 +131,7 @@ final class SystemKeyDispatcher {
             if (event.getRepeatCount() == 0) {
                 long due = event.getDownTime() + ViewConfiguration.getLongPressTimeout();
                 worker.post(() -> {
-                    if (mode != SnapConfig.OFF && !power.isInteractive())
+                    if (!closed && mode != SnapConfig.OFF && !power.isInteractive())
                         gesture.down(due - SystemClock.uptimeMillis());
                 });
             }
@@ -124,7 +140,7 @@ final class SystemKeyDispatcher {
     }
 
     private void startCapture() {
-        if (mode == SnapConfig.OFF || power.isInteractive()) return;
+        if (closed || mode == SnapConfig.OFF || power.isInteractive()) return;
         stopCapture();
         Intent service = new Intent(SnapConfig.ACTION_START)
                 .setClassName(SnapConfig.PACKAGE, SnapConfig.PACKAGE + ".SnapService");
@@ -154,7 +170,7 @@ final class SystemKeyDispatcher {
             }
 
             @Override public void start() {
-                if (mode == SnapConfig.OFF || power.isInteractive())
+                if (closed || mode == SnapConfig.OFF || power.isInteractive())
                     throw new IllegalStateException("Capture gesture is no longer eligible");
                 context.startForegroundService(service);
                 worker.removeCallbacks(captureTimeout);
@@ -185,6 +201,44 @@ final class SystemKeyDispatcher {
         capture = null;
         try {
             if (current != null) current.stop();
-        } catch (RuntimeException e) { module.log(Log.ERROR, HookEntry.TAG, "Street snap service could not stop", e); }
+        } catch (RuntimeException e) {
+            cleanupFailed = true;
+            module.log(Log.ERROR, HookEntry.TAG, "Street snap service could not stop", e);
+        }
+    }
+
+    boolean closeAndAwait(long timeoutMs) throws InterruptedException {
+        if (Looper.myLooper() == worker.getLooper()) return false;
+        closed = true;
+        ready = false;
+        mode = SnapConfig.OFF;
+        CountDownLatch cleaned = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean success = new java.util.concurrent.atomic.AtomicBoolean(true);
+        worker.removeCallbacksAndMessages(null);
+        if (!worker.post(() -> {
+            try {
+                gesture.cancel();
+                stopCapture();
+                if (observerRegistered) {
+                    context.getContentResolver().unregisterContentObserver(observer);
+                    observerRegistered = false;
+                }
+                if (receiverRegistered) {
+                    context.unregisterReceiver(receiver);
+                    receiverRegistered = false;
+                }
+            } catch (RuntimeException e) {
+                success.set(false);
+                module.log(Log.ERROR, HookEntry.TAG, "Hot reload policy cleanup failed", e);
+            } finally {
+                worker.removeCallbacksAndMessages(null);
+                thread.quitSafely();
+                cleaned.countDown();
+            }
+        })) return !thread.isAlive();
+        long deadline = SystemClock.elapsedRealtime() + timeoutMs;
+        if (!cleaned.await(timeoutMs, TimeUnit.MILLISECONDS)) return false;
+        thread.join(Math.max(1, deadline - SystemClock.elapsedRealtime()));
+        return success.get() && !cleanupFailed && !thread.isAlive();
     }
 }

@@ -11,9 +11,9 @@ android {
         namespace 'io.github.vay1314.camerasnap'
         applicationId namespace
         minSdk 29
-        targetSdk 34
-        versionCode 2019
-        versionName "2.0.1"
+        targetSdk 37
+        versionCode 2020
+        versionName "2.0.2"
         applicationVariants.configureEach { variant ->
             variant.outputs.configureEach {
                 outputFileName = "CameraSnap_" + versionName + "(" + versionCode + ").apk"
@@ -56,7 +56,8 @@ dependencies {
     implementation 'top.yukonga.miuix.kmp:miuix-ui-android:0.9.4'
     implementation 'top.yukonga.miuix.kmp:miuix-preference-android:0.9.4'
     implementation 'androidx.activity:activity-compose:1.13.0'
-    implementation 'org.jetbrains.compose.foundation:foundation-android:1.12.0'
+    implementation 'org.jetbrains.compose.foundation:foundation-android:1.12.2'
     compileOnly 'io.github.libxposed:api:102.0.0'
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'io.github.libxposed:api:102.0.0'
 }
