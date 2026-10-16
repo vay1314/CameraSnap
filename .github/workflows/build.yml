@@ -104,6 +104,8 @@ jobs:
               raise SystemExit("APK 版本信息不适合生成 Release 标签")
           print(f"tag=v{name}")
           print(f"name=v{name}")
+          print(f"module_tag={code}-{name}")
+          print(f"module_name={name}")
           PY
 
       - name: 发布到 GitHub Release
@@ -113,9 +115,19 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_NAME: ${{ steps.release.outputs.name }}
         run: |
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "$RELEASE_NAME"
-            gh release upload "$RELEASE_TAG" build/signed-apk/*.apk --repo "$GITHUB_REPOSITORY"
-          else
-            gh release create "$RELEASE_TAG" build/signed-apk/*.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$RELEASE_NAME" --generate-notes
+          bash .github/scripts/publish-release.sh "$GITHUB_REPOSITORY" "$RELEASE_TAG" "$RELEASE_NAME" "" "$GITHUB_SHA"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body --jq '.body // ""' > build/release-notes.md
+
+      - name: 同步到 Xposed Modules Repository
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.MODULES_REPO_TOKEN }}
+          MODULE_REPOSITORY: Xposed-Modules-Repo/io.github.vay1314.camerasnap
+          RELEASE_TAG: ${{ steps.release.outputs.module_tag }}
+          RELEASE_NAME: ${{ steps.release.outputs.module_name }}
+        run: |
+          if [[ -z "$GH_TOKEN" ]]; then
+            printf '::error::请配置有模块仓库写入权限的 Secret：MODULES_REPO_TOKEN\n'
+            exit 1
           fi
+          bash .github/scripts/publish-release.sh "$MODULE_REPOSITORY" "$RELEASE_TAG" "$RELEASE_NAME" build/release-notes.md

@@ -1,12 +1,15 @@
 package io.github.vay1314.camerasnap;
 
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.database.ContentObserver;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.IBinder;
 import android.os.Build;
 import android.os.PowerManager;
 import android.os.SystemClock;
@@ -26,6 +29,8 @@ final class SystemKeyDispatcher {
     private final String hookDescription;
     private int retries;
     private final Runnable refresh = this::reload;
+    private BoundCapture capture;
+    private final Runnable captureTimeout = this::stopCapture;
 
     SystemKeyDispatcher(Context context, HookEntry module, String description) {
         this.context = context;
@@ -120,16 +125,66 @@ final class SystemKeyDispatcher {
 
     private void startCapture() {
         if (mode == SnapConfig.OFF || power.isInteractive()) return;
+        stopCapture();
+        Intent service = new Intent(SnapConfig.ACTION_START)
+                .setClassName(SnapConfig.PACKAGE, SnapConfig.PACKAGE + ".SnapService");
+        capture = new BoundCapture(new BoundCapture.Transport() {
+            private ServiceConnection connection;
+
+            @Override public boolean bind(Runnable connected, Runnable disconnected) {
+                connection = new ServiceConnection() {
+                    @Override public void onServiceConnected(ComponentName name, IBinder binder) {
+                        try { connected.run(); }
+                        catch (RuntimeException e) { module.log(Log.ERROR, HookEntry.TAG, "Bound capture start failed", e); }
+                    }
+                    private void disconnect() {
+                        try { disconnected.run(); }
+                        catch (RuntimeException e) { module.log(Log.ERROR, HookEntry.TAG, "Capture binding cleanup failed", e); }
+                    }
+                    @Override public void onServiceDisconnected(ComponentName name) { disconnect(); }
+                    @Override public void onBindingDied(ComponentName name) { disconnect(); }
+                    @Override public void onNullBinding(ComponentName name) {
+                        module.log(Log.ERROR, HookEntry.TAG, "Capture service returned a null binding");
+                        disconnect();
+                    }
+                };
+                int flags = Context.BIND_AUTO_CREATE;
+                if (Build.VERSION.SDK_INT >= 30) flags |= Context.BIND_INCLUDE_CAPABILITIES;
+                return context.bindService(service, flags, worker::post, connection);
+            }
+
+            @Override public void start() {
+                if (mode == SnapConfig.OFF || power.isInteractive())
+                    throw new IllegalStateException("Capture gesture is no longer eligible");
+                context.startForegroundService(service);
+                worker.removeCallbacks(captureTimeout);
+                worker.postDelayed(captureTimeout, SnapConfig.MAX_SESSION_MS + 15_000);
+                module.log(Log.INFO, HookEntry.TAG, "Capture started with system service binding, capabilities=" +
+                        (Build.VERSION.SDK_INT >= 30));
+            }
+
+            @Override public void stop() {
+                context.startService(new Intent(SnapConfig.ACTION_STOP)
+                        .setClassName(SnapConfig.PACKAGE, SnapConfig.PACKAGE + ".SnapService"));
+            }
+
+            @Override public void unbind() { context.unbindService(connection); }
+        });
         try {
-            context.startForegroundService(new Intent(SnapConfig.ACTION_START)
-                    .setClassName(SnapConfig.PACKAGE, SnapConfig.PACKAGE + ".SnapService"));
-        } catch (RuntimeException e) { module.log(Log.ERROR, HookEntry.TAG, "Street snap service could not start", e); }
+            if (capture.begin()) worker.postDelayed(captureTimeout, 15_000);
+            else { capture = null; module.log(Log.ERROR, HookEntry.TAG, "Capture service binding was rejected"); }
+        } catch (RuntimeException e) {
+            capture = null;
+            module.log(Log.ERROR, HookEntry.TAG, "Street snap service could not bind", e);
+        }
     }
 
     private void stopCapture() {
+        worker.removeCallbacks(captureTimeout);
+        BoundCapture current = capture;
+        capture = null;
         try {
-            context.startService(new Intent(SnapConfig.ACTION_STOP)
-                    .setClassName(SnapConfig.PACKAGE, SnapConfig.PACKAGE + ".SnapService"));
+            if (current != null) current.stop();
         } catch (RuntimeException e) { module.log(Log.ERROR, HookEntry.TAG, "Street snap service could not stop", e); }
     }
 }
